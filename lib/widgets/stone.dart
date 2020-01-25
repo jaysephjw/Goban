@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:goban/themes/stoneTheme.dart';
+import 'package:goban/themes/gobanTheme.dart';
 
 class Stone extends StatelessWidget {
   final StoneTheme theme;
   final double size;
   final bool last;
+  final bool ghost;
 
   const Stone(
-      {Key key, @required this.theme, @required this.size, @required this.last})
+      {Key key, @required this.theme, @required this.size, this.last = false, this.ghost = false})
       : super(key: key);
 
   Color _getInverseColor(Color color) {
@@ -30,7 +31,7 @@ class Stone extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
           border: Border.all(color: theme.borderColor, width: 2),
-          color: theme.stoneColor,
+          color: !ghost ? theme.stoneColor : theme.stoneColor.withOpacity(.5),
           borderRadius: BorderRadius.circular(size)),
     );
     if (last) {

@@ -1,48 +1,34 @@
 import 'dart:async';
 
-import 'package:goban/data_classes/move.dart';
 import 'package:goban/data_classes/position.dart';
-import 'package:goban/enums/boardSize.dart';
-import 'package:goban/enums/player.dart';
 import 'package:goban/goban.dart';
-import 'package:goban/models/gobanModel.dart';
+import 'package:goban/models/game_logic.dart';
 import 'package:goban/themes/gobanTheme.dart';
-import 'package:provider/provider.dart';
 
 class GobanController {
-  final BoardSize boardSize;
-  final GobanTheme gobanTheme;
-  final StreamController<Position> gobanStream = StreamController<Position>();
+  final int boardSize;
+  final GobanTheme theme;
 
-  ChangeNotifierProvider<GobanModel> goban;
-  GobanModel _model;
+  GobanModel model;
 
-  GobanController({this.boardSize = BoardSize.Thirteen, this.gobanTheme}) {
-    _model = GobanModel(
-        boardSize: boardSize,
-        gobanTheme: gobanTheme ?? GobanTheme.defaultTheme());
+  Stream<Move> get clicks => _clicks.stream;
+  Stream<Move> get hovers => _hovers.stream.distinct(); // de-dupe
 
-    _model.moveStream.stream.listen((Position move) {
-      gobanStream.add(move);
-    });
+  final StreamController<Move> _clicks = StreamController<Move>();
+  final StreamController<Move> _hovers = StreamController<Move>();
 
-    goban = ChangeNotifierProvider<GobanModel>(
-        builder: (_) => _model, child: Goban());
+  GobanController({this.boardSize = 9, this.theme = GobanTheme.bookTheme})
+  {
+    model = GobanWithRules(boardSize);
   }
 
-  void addMove(Move move) {
-    _model.makeMove(move);
+  // Call to clean up this controller.
+  dispose() {
+    _clicks.close();
+    _hovers.close();
   }
 
-  void setTheme(GobanTheme theme) {
-    _model.setTheme(theme);
-  }
+  void mouseHovered(Move position) => _hovers.add(position);
 
-  void setSize(BoardSize size) {
-    _model.setSize(size);
-  }
-
-  Player getPlayerFromPosition(Position pos) {
-    return _model.getPlayerFromPosition(pos);
-  }
+  void clicked(Move position) => _clicks.add(position);
 }
