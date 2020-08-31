@@ -5,7 +5,14 @@ class StarPoints {
   static bool isStarPoint(Move move, boardSize) =>
       stars(boardSize).any((m) => m.locationEquals(move));
 
-  static List<Move> stars(int size) => _starsMap[size] ?? [];
+  static List<Move> stars(int size) {
+    final list = _starsMap[size] ?? [];
+    if (list.isEmpty && size.isOdd) {
+      int center = (size / 2).floor();
+      list.add(Move.empty(center, center));
+    }
+    return list;
+  }
 
   static const Map<int, List<Move>> _starsMap = {
     9: starPoints9x9,

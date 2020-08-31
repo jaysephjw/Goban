@@ -2,9 +2,11 @@ import 'dart:collection';
 
 import 'package:goban/data_classes/position.dart';
 import 'package:goban/goban.dart';
+import 'package:goban/extensions/extensions.dart';
 
 /// A go board, with a size, positioned stones, and decoration.
-abstract class GobanModel {
+abstract class GameState {
+
   /// Size of one side of the board, e.g. 9
   int get size;
 
@@ -25,15 +27,21 @@ abstract class GobanModel {
   /// * update friendly neighboring groups
   ///
   /// Consider passing back a result here instead.
+  ///
+  /// TODO: this is really where all the rules live.
   bool play(Move position);
 
-  /// A position on which to render a potential placement (mouse hover).
-  /// TODO: Move this into a 'decoration' abstraction.
-  Move ghost;
+  /// Last played move.
+  Move get current;
+
+  /// List of all previously played moves.
+  Iterable<Move> get history;
+
+  StoneColor get nextColor;
 }
 
 /// A Goban that enforce some rules of the game: capture, ko (TODO), and suicide.
-class GobanWithRules implements GobanModel {
+class GobanWithRules implements GameState {
 
   @override
   final int size;
@@ -42,6 +50,16 @@ class GobanWithRules implements GobanModel {
 //  List<Move> _positions;
 
   BoardMap _positions;
+  Queue<Move> _history = Queue();
+
+  @override
+  Iterable<Move> get history => _history;
+
+  @override
+  Move get current => _history.last;
+
+  @override
+  StoneColor get nextColor => _history.isNotEmpty ? _history.last.color.flipped() : StoneColor.Black;
 
   @override
   Move ghost;
@@ -52,7 +70,7 @@ class GobanWithRules implements GobanModel {
 
   @override
   List<Move> positions() => _positions.getAll();
-
+  
   @override
   Move positionAt(int x, int y) {
     assert( x >= 0 && x < size);
@@ -68,7 +86,7 @@ class GobanWithRules implements GobanModel {
     // Special case :: 'play' with no color.  Allow this to implement an 'eraser' tool.
     // This can cause no kills and is always legal.
     if (newPosition.isEmpty) {
-      _positions.set(newPosition);
+      _addMove(newPosition);
       return true;
     }
 
@@ -108,12 +126,17 @@ class GobanWithRules implements GobanModel {
     }
 
     // Add the stone and remove any killed ones
-    _positions.set(newPosition);
+    _addMove(newPosition);
     killed.forEach((p) => _positions.set(p.cleared()));
 
     // Print neighbors
     print('New Position in group size ${_getGroup(newPosition).length}');
     return true;
+  }
+  
+  void _addMove(Move move) {
+    _positions.set(move);
+    _history.add(move);
   }
 
   List<Move> _neighbors(Move p) {
@@ -153,7 +176,7 @@ class GobanWithRules implements GobanModel {
 //  _calcLiberty(Set<Move> group) =>
 //      group.expand((p) => _neighbors(p))                // get all neighbors
 //          .toSet()                                      // filter out repeats
-//          .where((neighbor) => !group.contains(neighbor)) // Ignore positions in this group itself; this is important as it may not yet be on the board
+//          .where((neighbor) => !group.contains(neighbor))
 //          .where((neighbor) => neighbor.isEmpty)        // count only empty ones
 //          .length;                                      // get the length.
 //}
@@ -162,11 +185,20 @@ class GobanWithRules implements GobanModel {
   ///
   /// Each unique empty neighbor of any stone in the group counts as a liberty.
   _calcLiberty(Set<Move> group) {
+    // get neighbors
     Iterable<Move> positions = group.expand((p) => _neighbors(p));
+
+    // remove dupes
     positions = positions.toSet();
+
+    // Ignore positions in this group itself;
+    // this is important as it may not yet be on the board
     positions = positions.where((neighbor) =>
-      !group.any((g) => neighbor.x == g.x && neighbor.y == g.y));
+      group.none((g) => neighbor.locationEquals(g)));
+
+    // Filter for empty
     positions = positions.where((neighbor) => neighbor.isEmpty);
+
     return positions.length;
   }
 }

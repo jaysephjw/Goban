@@ -8,28 +8,40 @@ import 'package:goban/helpers/starPoints.dart';
 
 import 'dart:ui' as ui;
 
-class BoardWidget extends StatelessWidget {
+class GobanWidget extends StatelessWidget {
 
-  final GobanController controller;
+  final BoardController controller;
 
-  const BoardWidget({Key key, this.controller}) : super(key: key);
+  const GobanWidget({Key key, this.controller}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
 
-    final double inset = 20; // TODO: Calculate more elegantly (e.g. 1 cell-size)
-
     return AspectRatio(
       aspectRatio: 1,
-      child: Material(
-        elevation: 10,
-        child: CustomPaint(
-          painter: _BackgroundPainter(),
-          child: Padding(
-            padding: EdgeInsets.all(inset),
-            child: _InnerBoardWidget(controller: controller),
-          ),
-        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          print('Constraints $constraints');
+
+          final width = constraints.widthConstraints().smallest.width;
+          final borderCellSize = controller.theme.borderSizeInCells;
+          final cellSize = width / (controller.boardSize + borderCellSize + borderCellSize);
+          final borderSize = cellSize * borderCellSize;
+          return Container(
+            decoration: BoxDecoration(
+              boxShadow: [
+                controller.theme.boardShadow,
+              ]
+            ),
+            child: CustomPaint(
+              painter: _BackgroundPainter(controller.theme),
+              child: Padding(
+                padding: EdgeInsets.all(borderSize),
+                child: _InnerBoardWidget(controller: controller),
+              ),
+            ),
+          );
+        }
       ),
     );
   }
@@ -41,7 +53,7 @@ class BoardWidget extends StatelessWidget {
 /// Uses all available width; provide at least that much height.
 class _InnerBoardWidget extends StatefulWidget {
 
-  final GobanController controller;
+  final BoardController controller;
 
 
   _InnerBoardWidget({key, @required this.controller}) : super(key: key);
@@ -52,40 +64,41 @@ class _InnerBoardWidget extends StatefulWidget {
 
 class _InnerBoardWidgetState extends State<_InnerBoardWidget> {
 
-  // State
-  BuildContext _context;
-  Offset _hover;
+  Move _ghost;
 
   @override
   Widget build(BuildContext context) {
-    this._context = context;
-
+    print('built');
     return Listener(
       onPointerHover: (event) {
         setState(() {
+          print('on hover');
           final localPosition = _localPosition(event.position);
-          final nearest = moveForOffset(widget.controller, _context.size, localPosition);
+          final nearest = moveForOffset(widget.controller, context.size, localPosition);
           widget.controller.mouseHovered(nearest);
+          _ghost = nearest;
         });
       },
       onPointerExit: (event) {
         setState(() {
           widget.controller.mouseHovered(null);
+          _ghost = null;
         });
       },
       child: GestureDetector(
-        child: CustomPaint(painter: _BoardPainter(widget.controller.model, widget.controller.theme)),
+        child: CustomPaint(painter: _BoardPainter(widget.controller.model, widget.controller.theme, _ghost)),
         onTapUp: (event) {
           final localPosition = _localPosition(event.globalPosition);
-          final nearest = moveForOffset(widget.controller, _context.size, localPosition);
+          final nearest = moveForOffset(widget.controller, context.size, localPosition);
           widget.controller.clicked(nearest);
+          print('on onTapUp $nearest');
         },
       ),
     );
   }
 
   Offset _localPosition(Offset globalPosition) {
-    final RenderBox renderBox = _context.findRenderObject() as RenderBox;
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
     return renderBox.globalToLocal(globalPosition);
   }
 }
@@ -93,14 +106,25 @@ class _InnerBoardWidgetState extends State<_InnerBoardWidget> {
 /// Paints the background of the board.
 class _BackgroundPainter extends CustomPainter {
 
-  static Paint boardPaint = Paint()..color = Color(0xFFDDB06C);
+  final GobanTheme theme;
+  final Paint boardPaint;
+//  static Paint boardPaint = Paint()..color = Color(0xFFDDB06C);
+
+  _BackgroundPainter(this.theme) :
+        boardPaint = Paint()..color = theme.boardColor
+  ;
 
   @override
-  void paint(Canvas canvas, Size size) =>
-      canvas.drawRect(Rect.fromPoints(
-          size.topLeft(Offset.zero),
-          size.bottomRight(Offset.zero)),
-          boardPaint);
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTRB(0, size.height, size.width, 0);
+
+    if (theme.boardGradient != null) {
+      Paint p = Paint()..shader = theme.boardGradient.createShader(rect);
+      canvas.drawRect(rect, p);
+    } else {
+      canvas.drawRect(rect, boardPaint);
+    }
+  }
 
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => false;
@@ -109,21 +133,26 @@ class _BackgroundPainter extends CustomPainter {
 /// Paints the lines and stones of the board.  Does not paint the background.
 class _BoardPainter extends CustomPainter {
 
-  final GobanModel model;
+  final GameState model;
   final GobanTheme theme;
+  final Move ghost;
 
-  static Paint linePaint = Paint()..color = Colors.black..strokeWidth = 1.1;
-  static Paint blackStonePaint = Paint()..color = Colors.grey[900];
-  static Paint whiteStonePaint = Paint()..color = Colors.grey[350];
   static Paint hoverPaint = Paint()..color = (Colors.grey[600].withOpacity(.5));
 
-  final Paint blackStoneFill, blackStoneBorder, whiteStoneFill, whiteStoneBorder;
+  final Paint linePaint, blackStoneFill, blackStoneBorder, whiteStoneFill, whiteStoneBorder;
 
-  _BoardPainter(this.model, this.theme) :
+  _BoardPainter(this.model, this.theme, this.ghost) :
+        linePaint = Paint()..color = theme.lineColor..strokeWidth = theme.lineWidth,
         blackStoneFill = Paint()..color = theme.blackStones.stoneColor,
-        blackStoneBorder = Paint()..color = theme.blackStones.borderColor,
+        blackStoneBorder = Paint()
+          ..color = theme.blackStones.borderColor ?? Colors.transparent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
         whiteStoneFill = Paint()..color = theme.whiteStones.stoneColor,
-        whiteStoneBorder = Paint()..color = theme.whiteStones.borderColor
+        whiteStoneBorder = Paint()
+          ..color = theme.whiteStones.borderColor ?? Colors.transparent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
   ;
 
   @override
@@ -166,48 +195,44 @@ class _BoardPainter extends CustomPainter {
     });
 
     // Draw the hover cursor
-    if (model.ghost != null) {
-      final Offset offset = Offset(model.ghost.x * cellSize, model.ghost.y * cellSize);
+    if (ghost != null) {
+      final Offset offset = Offset(ghost.x * cellSize, ghost.y * cellSize);
       canvas.drawCircle(offset, stoneSize, hoverPaint);
     }
   }
 
   void drawStone(Move p, Offset center, double cellSize, Canvas canvas) {
+    final radius = (cellSize / 2) - 1;
 
-    final size = Size(cellSize / 2, cellSize / 2);
+    // Draw the stone
+    Paint stonePaint = p.isBlack ? blackStoneFill : whiteStoneFill;
+    canvas.drawCircle(center, radius, stonePaint);
 
-    canvas.drawCircle(center, cellSize / 2, _paintForStone(p.color));
-
+    // Draw glint, if any
     final focus = cellSize / 6;
-    final radius = cellSize / 2;
+    if (p.isBlack && theme.blackStones.glint)  {
+      final gradient =
+      ui.Gradient.radial(center.translate(-focus, -focus), radius,
+          [
+            Colors.white.withOpacity(.4),
+            Colors.white.withOpacity(0),
+          ]);
+      final gradientPaint = new Paint()..shader = gradient;
+      canvas.drawCircle(center, cellSize / 2, gradientPaint);
+    } else if (p.isWhite && theme.whiteStones.glint) {
+      final gradient =
+      ui.Gradient.radial(center.translate(focus * 1.1, focus * 1.1), radius,
+          [
+            Colors.white.withOpacity(.5),
+            Colors.white.withOpacity(1),
+          ]);
+      final gradientPaint = new Paint()..shader = gradient;
+      canvas.drawCircle(center, cellSize / 2, gradientPaint);
+    }
 
-    final gradient = p.isBlack ?
-    ui.Gradient.radial(center.translate(-focus, -focus), radius,
-        [
-          Colors.white.withOpacity(.5),
-          Colors.white.withOpacity(0),
-        ]) :
-    ui.Gradient.radial(center.translate(focus, focus), radius,
-        [
-          Colors.white.withOpacity(.0),
-          Colors.white.withOpacity(.4),
-        ]);
-    final gradientPaint = new Paint()..shader = gradient;
-
-    canvas.drawCircle(center, cellSize / 2, gradientPaint);
-
-//    canvas.drawPath(
-//        Path()
-//          ..addOval(
-//              Rect.fromPoints(center, center.translate(size.width, size.height)))
-////          ..fillType = PathFillType.evenOddx
-//        ,
-//        Paint()
-//      ..color= Colors.black.withOpacity(.5)
-//      ..maskFilter = MaskFilter.blur(BlurStyle.normal, convertRadiusToSigma(3)));
-
-
-
+    // Draw border, ( may be transparent ;) this is hacky. )
+    final borderPaint = p.isBlack ? blackStoneBorder : whiteStoneBorder;
+    canvas.drawCircle(center, radius - (borderPaint.strokeWidth / 2), borderPaint);
   }
 
   static double convertRadiusToSigma(double radius) {
@@ -224,12 +249,12 @@ class _BoardPainter extends CustomPainter {
 
 
   Paint _paintForStone(StoneColor color) {
-    return color == StoneColor.White ? whiteStonePaint : blackStonePaint;
+    return color == StoneColor.White ? whiteStoneFill : blackStoneFill;
   }
 
 }
 
-Move moveForOffset(GobanController board, Size boardSize, Offset localPosition) {
+Move moveForOffset(BoardController board, Size boardSize, Offset localPosition) {
   final double cellSize = boardSize.width / (board.model.size - 1);
   final int x = (localPosition.dx / cellSize).round();
   final int y = (localPosition.dy / cellSize).round();

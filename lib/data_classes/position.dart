@@ -14,9 +14,9 @@ class Move {
 
   const Move.empty(int x, int y) : this(x, y, StoneColor.Empty);
 
-  bool get isEmpty => this.color == StoneColor.Empty;
-
   bool get isBlack => this.color == StoneColor.Black;
+  bool get isWhite => this.color == StoneColor.White;
+  bool get isEmpty => this.color == StoneColor.Empty;
 
   Move cleared() => Move(x, y, StoneColor.Empty);
 

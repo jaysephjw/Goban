@@ -5,19 +5,22 @@ import 'package:goban/goban.dart';
 import 'package:goban/models/game_logic.dart';
 import 'package:goban/themes/gobanTheme.dart';
 
-class GobanController {
+/// 
+class BoardController {
+
   final int boardSize;
   final GobanTheme theme;
-
-  GobanModel model;
+  GameState model;
 
   Stream<Move> get clicks => _clicks.stream;
   Stream<Move> get hovers => _hovers.stream.distinct(); // de-dupe
 
+  final List<Move> history = [];
+
   final StreamController<Move> _clicks = StreamController<Move>();
   final StreamController<Move> _hovers = StreamController<Move>();
 
-  GobanController({this.boardSize = 9, this.theme = GobanTheme.bookTheme})
+  BoardController({this.boardSize = 9, this.theme = GobanTheme.bookTheme})
   {
     model = GobanWithRules(boardSize);
   }
@@ -28,7 +31,9 @@ class GobanController {
     _hovers.close();
   }
 
+  /// Notify the controller a position was hovered.
   void mouseHovered(Move position) => _hovers.add(position);
 
+  /// Notify the controller a position was clicked.
   void clicked(Move position) => _clicks.add(position);
 }
